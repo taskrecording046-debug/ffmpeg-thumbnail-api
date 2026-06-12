@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Media Thumbnail Service</title>
+  <style>
+    /* ===== Design tokens ===== */
+    :root {
+      --bg: #f3f5f7;
+      --surface: #ffffff;
+      --ink: #1c2733;
+      --ink-soft: #5b6b7b;
+      --line: #dde3e9;
+      --accent: #2563eb;
+      --error: #b91c1c;
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .wrap {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 48px 24px 64px;
+    }
+
+    .eyebrow {
+      margin: 0 0 6px;
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      color: var(--ink-soft);
+    }
+
+    h1 {
+      margin: 0 0 24px;
+      font-size: 26px;
+    }
+
+    form {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: grid;
+      gap: 14px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--ink-soft);
+    }
+
+    input[type="text"] {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    button {
+      justify-self: start;
+      padding: 9px 18px;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:disabled { opacity: 0.5; cursor: default; }
+
+    .result {
+      margin-top: 24px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .result pre {
+      margin: 0;
+      padding: 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 12px;
+      overflow-x: auto;
+    }
+
+    .result pre.is-error { color: var(--error); }
+
+    .result img {
+      max-width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="eyebrow">MEDIA THUMBNAIL SERVICE</p>
+    <h1>Upload a video, get a thumbnail</h1>
+
+    <form id="upload-form">
+      <label>
+        Video file
+        <input type="file" name="video" accept="video/*" required />
+      </label>
+      <label>
+        Timestamp (HH:MM:SS)
+        <input type="text" name="timestamp" value="00:00:01" />
+      </label>
+      <button type="submit">Generate thumbnail</button>
+    </form>
+
+    <div class="result" id="result" hidden>
+      <pre id="response-json"></pre>
+      <img id="thumbnail" alt="Generated thumbnail" hidden />
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("upload-form");
+    const result = document.getElementById("result");
+    const responseJson = document.getElementById("response-json");
+    const thumbnail = document.getElementById("thumbnail");
+    const button = form.querySelector("button");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      result.hidden = false;
+      thumbnail.hidden = true;
+      responseJson.classList.remove("is-error");
+      responseJson.textContent = "Uploading…";
+
+      try {
+        const res = await fetch("/api/thumbnails", {
+          method: "POST",
+          body: new FormData(form),
+        });
+        const data = await res.json();
+        responseJson.textContent = JSON.stringify(data, null, 2);
+
+        if (res.ok && data.thumbnail) {
+          // Cache-bust so a regenerated thumbnail always shows fresh
+          thumbnail.src = data.thumbnail + "?t=" + Date.now();
+          thumbnail.hidden = false;
+        } else {
+          responseJson.classList.add("is-error");
+        }
+      } catch (err) {
+        responseJson.classList.add("is-error");
+        responseJson.textContent = "Request failed: " + err.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
