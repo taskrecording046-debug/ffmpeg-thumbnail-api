@@ -9,6 +9,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const { generateThumbnail } = require("./lib/thumbnail");
+const { startTranscode } = require("./lib/transcode");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -56,6 +57,39 @@ app.post("/api/thumbnails", upload.single("video"), async (req, res) => {
     res.status(500).json({ error: "Thumbnail generation failed. See server logs." });
   }
 });
+
+app.get("/api/transcode", (req, res) => {
+  const name = req.query.name
+  if (!name) {
+    return res.status(400).json({ error: "Pass ?name=<uploaded filename>." })
+  }
+
+  const inputPath = path.join(UPLOAD_DIR, path.basename(name))
+  if (!fs.existsSync(inputPath)) {
+    return res.status(404).json({ error: "Upload file not found." })
+  }
+
+  res.setHeader("Content-Type", "video/mp4")
+
+  const { process: ffmpeg, stop } = startTranscode(inputPath)
+  ffmpeg.stdout.pipe(res)
+
+  ffmpeg.stderr.on("data", (chunk) => {
+    const line = chunk.toString()
+    if (line.includes("frame=")) process.stdout.write(`[ffmpeg ${ffmpeg.pid}] ${line.trim()}\r`)
+  })
+
+  ffmpeg.on("close", (code) => {
+    console.log(`\n[ffmpeg ${ffmpeg.pid}] exited with code ${code}`)
+  })
+
+  req.on("close", () => {
+    if (ffmpeg.exitCode === null) {
+      console.log(`\n[ffmpeg ${ffmpeg.pid}] client disconnected - killing transcode`)
+      stop()
+    }
+  })
+})
 
 app.listen(PORT, () => {
   console.log(`Media thumbnail service listening on http://localhost:${PORT}`);
