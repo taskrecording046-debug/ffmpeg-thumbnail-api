@@ -10,6 +10,15 @@ const path = require("path");
 const fs = require("fs");
 const { generateThumbnail } = require("./lib/thumbnail");
 const { startTranscode } = require("./lib/transcode");
+const { generateAllSizes } = require("./lib/thumbnail-sizes");
+
+const SIZES = [
+  { label: "thumb", width: 320 },
+  { label: "small", width: 640 },
+  { label: "medium", width: 1280 },
+  { label: "large", width: 1920 },
+  { label: "xlarge", width: 2560 },
+];
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -90,6 +99,40 @@ app.get("/api/transcode", (req, res) => {
     }
   })
 })
+
+app.post("/api/thumbnails/sizes", upload.single("video"), async (req, res) => {
+  if (!req.file) {
+    return res
+      .status(400)
+      .json({ error: "No video uploaded. Send the file in a field named 'video'." });
+  }
+
+  const timestamp = req.body.timestamp || "00:00:01";
+  const baseName = path.parse(req.file.filename).name;
+
+  try {
+    const results = await generateAllSizes({
+      inputPath: req.file.path,
+      outDir: THUMB_DIR,
+      baseName,
+      timestamp,
+      sizes: SIZES,
+    });
+
+    res.json({
+      source: req.file.originalname,
+      timestamp,
+      thumbnails: results.map((r) => ({
+        label: r.label,
+        width: r.width,
+        url: `/thumbnails/${encodeURIComponent(r.fileName)}`,
+      })),
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Thumbnail generation failed. See server logs." });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Media thumbnail service listening on http://localhost:${PORT}`);
